@@ -263,88 +263,112 @@ static bool yaml_uefi_var(UEFI_VARIABLE_DATA *data, size_t size, UINT32 type) {
      * keys, key exchange keys, database keys, and blacklisted database keys,
      * respectively. 
      */
-    if (type == EV_EFI_VARIABLE_DRIVER_CONFIG && 
-        ((strlen(ret) == 2 && strncmp(ret, "PK", 2) == 0) ||
-        (strlen(ret) == 3 && strncmp(ret, "KEK", 3) == 0) ||
-        (strlen(ret) == 2 && strncmp(ret, "db", 2) == 0) ||
-        (strlen(ret) == 3 && strncmp(ret, "dbx", 3) == 0))) {
+    if (type == EV_EFI_VARIABLE_DRIVER_CONFIG) {
+        if ((strlen(ret) == 2 && strncmp(ret, "PK", 2) == 0) ||
+            (strlen(ret) == 3 && strncmp(ret, "KEK", 3) == 0) ||
+            (strlen(ret) == 2 && strncmp(ret, "db", 2) == 0) ||
+            (strlen(ret) == 3 && strncmp(ret, "dbx", 3) == 0)) {
 
-        free(ret);
-        tpm2_tool_output("      VariableData:\n");
-        uint8_t *variable_data = (uint8_t *)&data->UnicodeName[
-            data->UnicodeNameLength];
-        /* iterate through each EFI_SIGNATURE_LIST */
-        while (start < size) {
-            EFI_SIGNATURE_LIST *slist = (EFI_SIGNATURE_LIST *)variable_data;
-            if (start + sizeof(*slist) > size) {
-                LOG_ERR("EventSize is inconsistent with actual data\n");
-                break;
-            }
-
-            if (slist->SignatureSize < 16) {
-                LOG_ERR("SignatureSize is too small\n");
-                break;
-            }
-
-            uuid_unparse_lower(slist->SignatureType, uuidstr);
-            tpm2_tool_output("      - SignatureType: %s\n"
-                             "        SignatureListSize: %" PRIu32 "\n"
-                             "        SignatureHeaderSize: %" PRIu32 "\n"
-                             "        SignatureSize: %" PRIu32 "\n"
-                             "        Keys:\n",
-                             uuidstr, slist->SignatureListSize,
-                             slist->SignatureHeaderSize,
-                             slist->SignatureSize);
-
-            start += (sizeof(*slist) + slist->SignatureHeaderSize);
-            if (start + slist->SignatureSize > size) {
-                LOG_ERR("EventSize is inconsistent with actual data\n");
-                break;
-            }
-
-            int signature_size = slist->SignatureListSize -
-                sizeof(*slist) - slist->SignatureHeaderSize;
-            if (signature_size < 0 || signature_size % slist->SignatureSize != 0) {
-                LOG_ERR("Malformed EFI_SIGNATURE_LIST\n");
-                break;
-            }
-
-            uint8_t *signature = (uint8_t *)slist +
-                sizeof(*slist) + slist->SignatureHeaderSize;
-            int signatures = signature_size / slist->SignatureSize;
-            /* iterate through each EFI_SIGNATURE on the list */
-            int i;
-            for (i = 0; i < signatures; i++) {
-                EFI_SIGNATURE_DATA *s = (EFI_SIGNATURE_DATA *)signature;
-                char *sdata = calloc (1,
-                    BYTES_TO_HEX_STRING_SIZE(slist->SignatureSize-16));
-                if (sdata == NULL) {
-                    LOG_ERR("Failled to allocate data: %s\n", strerror(errno));
-                    return false;
-                }
-                bytes_to_str(s->SignatureData, slist->SignatureSize-16, 
-                    sdata, BYTES_TO_HEX_STRING_SIZE(slist->SignatureSize-16));
-                uuid_unparse_lower(s->SignatureOwner, uuidstr);
-                tpm2_tool_output("        - SignatureOwner: %s\n"
-                                 "          SignatureData: %s\n",
-                                 uuidstr, sdata);
-                free(sdata);
-
-                signature += slist->SignatureSize;
-                start += slist->SignatureSize;
-                if (start > size) {
-                    LOG_ERR("Malformed EFI_SIGNATURE_DATA\n");
+            free(ret);
+            tpm2_tool_output("      VariableData:\n");
+            uint8_t *variable_data = (uint8_t *)&data->UnicodeName[
+                data->UnicodeNameLength];
+            /* iterate through each EFI_SIGNATURE_LIST */
+            while (start < size) {
+                EFI_SIGNATURE_LIST *slist = (EFI_SIGNATURE_LIST *)variable_data;
+                if (start + sizeof(*slist) > size) {
+                    LOG_ERR("EventSize is inconsistent with actual data\n");
                     break;
                 }
+
+                if (slist->SignatureSize < 16) {
+                    LOG_ERR("SignatureSize is too small\n");
+                    break;
+                }
+
+                uuid_unparse_lower(slist->SignatureType, uuidstr);
+                tpm2_tool_output("      - SignatureType: %s\n"
+                                 "        SignatureListSize: %" PRIu32 "\n"
+                                 "        SignatureHeaderSize: %" PRIu32 "\n"
+                                 "        SignatureSize: %" PRIu32 "\n"
+                                 "        Keys:\n",
+                                 uuidstr, slist->SignatureListSize,
+                                 slist->SignatureHeaderSize,
+                                 slist->SignatureSize);
+
+                start += (sizeof(*slist) + slist->SignatureHeaderSize);
+                if (start + slist->SignatureSize > size) {
+                    LOG_ERR("EventSize is inconsistent with actual data\n");
+                    break;
+                }
+
+                int signature_size = slist->SignatureListSize -
+                    sizeof(*slist) - slist->SignatureHeaderSize;
+                if (signature_size < 0 || signature_size % slist->SignatureSize != 0) {
+                    LOG_ERR("Malformed EFI_SIGNATURE_LIST\n");
+                    break;
+                }
+
+                uint8_t *signature = (uint8_t *)slist +
+                    sizeof(*slist) + slist->SignatureHeaderSize;
+                int signatures = signature_size / slist->SignatureSize;
+                /* iterate through each EFI_SIGNATURE on the list */
+                int i;
+                for (i = 0; i < signatures; i++) {
+                    EFI_SIGNATURE_DATA *s = (EFI_SIGNATURE_DATA *)signature;
+                    char *sdata = calloc (1,
+                        BYTES_TO_HEX_STRING_SIZE(slist->SignatureSize-16));
+                    if (sdata == NULL) {
+                        LOG_ERR("Failled to allocate data: %s\n", strerror(errno));
+                        return false;
+                    }
+                    bytes_to_str(s->SignatureData, slist->SignatureSize-16, 
+                        sdata, BYTES_TO_HEX_STRING_SIZE(slist->SignatureSize-16));
+                    uuid_unparse_lower(s->SignatureOwner, uuidstr);
+                    tpm2_tool_output("        - SignatureOwner: %s\n"
+                                     "          SignatureData: %s\n",
+                                     uuidstr, sdata);
+                    free(sdata);
+
+                    signature += slist->SignatureSize;
+                    start += slist->SignatureSize;
+                    if (start > size) {
+                        LOG_ERR("Malformed EFI_SIGNATURE_DATA\n");
+                        break;
+                    }
+                }
+                variable_data += slist->SignatureListSize;
             }
-            variable_data += slist->SignatureListSize;
+            return true;
         }
-        return true;
+        else if ((strlen(ret) == 10 && strncmp(ret, "SecureBoot", 10) == 0)) {
+            free(ret);
+            tpm2_tool_output("      VariableData:\n"
+                             "        Enabled:");
+            if (data->VariableDataLength == 0) {
+                tpm2_tool_output("'No'\n");
+            }
+            else if (data->VariableDataLength > 1) {
+                LOG_ERR("SecureBoot data length %" PRIu64 " > 1\n", 
+                        data->VariableDataLength);
+                return false;
+            }
+            else {
+                uint8_t *variable_data = (uint8_t *)&data->UnicodeName[
+                    data->UnicodeNameLength];
+                if (*variable_data == 0) {
+                    tpm2_tool_output("'No'\n");
+                }
+                else {
+                    tpm2_tool_output("'Yes'\n");
+                }
+            }
+            return true;
+        }
     }
-    else {
-        free(ret);
-        return yaml_uefi_var_data(data);
-    }
+
+    free(ret);
+    return yaml_uefi_var_data(data);
 }
 /* TCG PC Client FPF section 9.2.5 */
 bool yaml_uefi_platfwblob(UEFI_PLATFORM_FIRMWARE_BLOB *data) {
